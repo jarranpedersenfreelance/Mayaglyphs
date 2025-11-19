@@ -75,4 +75,7 @@ sudo certbot --nginx -d domain.com
 HTTPS should now be live! Certbot will autorenew the cert every 90 days
 
 ## Deployment
-Use the ./deploy.sh command to deploy the server both locally (for testing) and remotely
+Use the deploy.py script to deploy the server both locally (for testing) and remotely
+```
+python3 deploy.py local
+```
