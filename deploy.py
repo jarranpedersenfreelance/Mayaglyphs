@@ -37,6 +37,7 @@ def get_ssh_base_cmd():
 def sigint_handler(signal, frame):
     """Handles the SIGINT signal (Ctrl-C) gracefully."""
     print("\n\nCaught Ctrl-C. Shutting down...")
+    local_kill()
     sys.exit(0)
 
 def check_health():
@@ -68,6 +69,9 @@ def local_start():
     """Starts the server locally."""
     print(f"--- Running server locally at localhost:{LOCAL_PORT} ---")
     signal.signal(signal.SIGINT, sigint_handler)
+    # kill old if it exists
+    local_kill()
+    print("Starting local server...")
     # using sys.executable ensures we use the same python env running this script
     run_command([sys.executable, "server.py", str(LOCAL_PORT)])
 
@@ -76,6 +80,11 @@ def server_kill():
     ssh_cmd = get_ssh_base_cmd()
     ssh_cmd.append("pkill -f server.py")
     subprocess.run(ssh_cmd, stderr=subprocess.DEVNULL)
+
+def local_kill():
+    print("Stopping old server...")
+    ssh_cmd = get_ssh_base_cmd()
+    subprocess.run(['pkill', '-f', 'server.py'], stderr=subprocess.DEVNULL)
 
 def server_deploy():
     """Syncs files and restarts the remote server."""
