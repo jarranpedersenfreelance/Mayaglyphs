@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/Users/jarran/Projects/Code/Mayaglyphs/server.py", line 33, in <module>
+    run_server(PORT)
+  File "/Users/jarran/Projects/Code/Mayaglyphs/server.py", line 16, in run_server
+    with socketserver.TCPServer(("", port), Handler) as httpd:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.4_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/socketserver.py", line 456, in __init__
+    self.server_bind()
+  File "/opt/homebrew/Cellar/python@3.11/3.11.4_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/socketserver.py", line 472, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 48] Address already in use
