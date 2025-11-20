@@ -27,6 +27,7 @@ LOCAL_FILES = [
     "server.py", 
     "requirements.txt", 
     "favicon.png", 
+    "logs.py",
     "logpage"
 ]
 

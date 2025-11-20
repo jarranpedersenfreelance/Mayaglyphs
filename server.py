@@ -4,6 +4,7 @@ import sys
 import os
 import base64
 from dotenv import load_dotenv
+import logs
 
 # Site files and Webserver files
 DIRECTORY = "site/public/"
@@ -19,6 +20,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # Initialize the standard handler pointing to site files
         super().__init__(*args, directory=DIRECTORY, **kwargs)
+
+    def log_request(self, code='-', size='-'):
+        """Overrides the base class method to write logs to custom file"""
+        logs.log_request_to_file(self) 
 
     def do_GET(self):
         """Intercept specific routes before checking the static directory."""
