@@ -3,7 +3,7 @@ import socketserver
 import sys
 
 # --- Configuration ---
-DIRECTORY = "site"
+DIRECTORY = "site/public/"
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     """A request handler that serves files from a specific directory."""

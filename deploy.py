@@ -3,6 +3,9 @@ import sys
 import argparse
 import time
 import signal
+import zipfile
+import os
+import shutil
 import urllib.request
 import urllib.error
 
@@ -14,10 +17,12 @@ ACCESS_PORT = 80
 REMOTE_USER = "ec2-user"
 REMOTE_HOST = "3.129.121.42"
 KEY_PATH = "PersonalServerKey.pem"
-REMOTE_DIR = f"/home/{REMOTE_USER}/webserver/"
+REMOTE_DIR = f"/home/{REMOTE_USER}/"
+REMOTE_SITE_DIR = f"/home/{REMOTE_USER}/site/"
+LOCAL_SITE_DIR = "site"
 
-# Files/Folders to sync
-LOCAL_FILES = ["server.py", "site"]
+# Files to sync
+LOCAL_FILES = ["server.py"]
 
 # --- Helper Functions ---
 
@@ -64,6 +69,8 @@ def print_remote_logs():
     ssh_cmd = get_ssh_base_cmd()
     ssh_cmd.append(f"tail -n 20 {REMOTE_DIR}server.log")
     subprocess.run(ssh_cmd)
+
+# --- Command Functions ---
 
 def local_start():
     """Starts the server locally."""
@@ -128,21 +135,101 @@ def server_deploy():
     print("--- Remote Server Started! ---")
     print(f"Access the site at: http://{REMOTE_HOST}")
 
+def deploy_site_local(zip_file_path):
+    """Extracts the contents of a specified zip file into the local site/ directory."""
+    if not os.path.exists(zip_file_path):
+        print(f"Error: Zip file not found at {zip_file_path}")
+        sys.exit(1)
+        
+    print(f"Extracting {zip_file_path} contents to local '{LOCAL_SITE_DIR}' directory")
+
+    # Delete current contents
+    if os.path.exists(LOCAL_SITE_DIR):
+        print(f"Deleting existing local '{LOCAL_SITE_DIR}' directory...")
+        shutil.rmtree(LOCAL_SITE_DIR)
+    os.makedirs(LOCAL_SITE_DIR, exist_ok=False)
+    
+    try:
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+            zip_ref.extractall(LOCAL_SITE_DIR)
+        print("Extraction successful.")
+    except Exception as e:
+        print(f"Error during local extraction: {e}")
+        sys.exit(1)
+
+def deploy_site_remote(zip_file_path):
+    """Transfers the specified zip file to the remote server and extracts its contents into site/"""
+    if not os.path.exists(zip_file_path):
+        print(f"Error: Zip file not found at {zip_file_path}")
+        sys.exit(1)
+
+    remote_temp_path = os.path.join(REMOTE_DIR, os.path.basename(zip_file_path))
+    
+    print(f"Deploying {zip_file_path} to remote server and extracting to {REMOTE_SITE_DIR}")
+
+    # Transfer the ZIP file using rsync
+    print("Transferring zip file...")
+    rsync_cmd = [
+        "rsync", "-a", "-z",
+        "-e", f"ssh -i {KEY_PATH}",
+        zip_file_path,
+        f"{REMOTE_USER}@{REMOTE_HOST}:{REMOTE_DIR}"
+    ]
+    run_command(rsync_cmd)
+    
+    # Execute remote commands
+    print("Extracting contents remotely...")
+    remote_commands = (
+        # Delete current contents
+        f"rm -rf {REMOTE_SITE_DIR} && "
+        # Ensure the 'site' extraction directory exists
+        f"mkdir -p {REMOTE_SITE_DIR} && "
+        # Unzip the temporary file into the 'site' directory, overwriting existing files
+        f"unzip -o {remote_temp_path} -d {REMOTE_SITE_DIR} && "
+        # Clean up the temporary zip file
+        f"rm {remote_temp_path}"
+    )
+    ssh_cmd = get_ssh_base_cmd()
+    ssh_cmd.append(remote_commands)
+    run_command(ssh_cmd)
+
+    print("Remote site deployment complete.")
+
 # --- Main Execution ---
 
 def main():
     parser = argparse.ArgumentParser(description="Deployment Script")
-    parser.add_argument("action", choices=["local", "server", "kill"], 
-                        help="Action to perform: local (run locally), server (deploy), or kill (stop remote)")
+    
+    # Use subparser for complex command handling
+    subparsers = parser.add_subparsers(dest="action", required=True)
+
+    # Standard Commands (no extra arguments)
+    subparsers.add_parser("local", help="Run server locally.")
+    subparsers.add_parser("server", help="Deploy and restart remote server.")
+    subparsers.add_parser("kill", help="Stop remote server.")
+    
+    # local-site
+    parser_local_site = subparsers.add_parser("local-site", help="Extract specified ZIP file contents into local 'site' directory.")
+    parser_local_site.add_argument("zip_file_path", help="Path to the ZIP file.")
+
+    # server-site
+    parser_server_site = subparsers.add_parser("server-site", help="Transfer specified ZIP file to remote and extract into remote 'site' directory.")
+    parser_server_site.add_argument("zip_file_path", help="Path to the ZIP file.")
+
 
     args = parser.parse_args()
 
+    # Execution logic based on action
     if args.action == "local":
         local_start()
     elif args.action == "server":
         server_deploy()
     elif args.action == "kill":
         server_kill()
+    elif args.action == "local-site":
+        deploy_site_local(args.zip_file_path)
+    elif args.action == "server-site":
+        deploy_site_remote(args.zip_file_path)
 
 if __name__ == "__main__":
     main()
