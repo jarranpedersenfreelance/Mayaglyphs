@@ -9,10 +9,20 @@ import logs
 # Site files and Webserver files
 DIRECTORY = "site/public/"
 SYSTEM_ROOT = "." 
+RESOURCE_PREFIX = "resources/"
+ADMIN_PREFIX = "admin_pages/"
 
+# .env vars
 load_dotenv()
 USERNAME = os.getenv("ADMIN_USER")
 PASSWORD = os.getenv("ADMIN_PASS")
+
+# resource file types
+MIME_TYPES = {
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.png': 'image/png'
+}
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     """A request handler that serves files from a specific directory."""
@@ -27,13 +37,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         """Intercept specific routes before checking the static directory."""
+        resource_path = f"/{RESOURCE_PREFIX}"
+
+        if self.path.startswith(resource_path):
+            filepath = self.path[1:]
+            file_extension = os.path.splitext(filepath)[1].lower()
+            # Default to binary stream if unknown
+            content_type = MIME_TYPES.get(file_extension, 'application/octet-stream')
+
+            self.serve_file_from_root(filepath, content_type=content_type)
         
-        if self.path == '/favicon.ico':
-            self.serve_file_from_root("favicon.png", "image/png")
+        elif self.path == '/favicon.ico':
+            self.serve_file_from_root(f"{RESOURCE_PREFIX}favicon.png", "image/png")
+
+        elif self.path == '/requests.log':
+            if self.check_auth():
+                self.serve_file_from_root("requests.log", "text/plain; charset=utf-8")
             
         elif self.path == '/logs':
             if self.check_auth():
-                self.serve_file_from_root("logpage/logs.html", "text/plain; charset=utf-8")
+                self.serve_file_from_root(f"{ADMIN_PREFIX}logs.html", "text/html; charset=utf-8")
             
         else:
             super().do_GET()

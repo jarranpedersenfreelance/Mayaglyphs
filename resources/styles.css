@@ -1,0 +1,110 @@
+/* --- Base Page Styling --- */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    background-color: #f6f8fa;
+    color: #24292e;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+h1 {
+    margin-bottom: 20px;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+/* --- Table Structure and Style --- */
+.table-wrapper {
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    background-color: #fff;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+th {
+    padding: 12px 15px;
+    text-align: left;
+    background-color: #f7f7f7;
+    border-bottom: 1px solid #e1e4e8;
+    color: #586069;
+    font-weight: 600;
+}
+
+td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee; /* Light divider between rows */
+}
+
+/* --- Effects --- */
+
+/* Zebra Striping */
+tbody tr:nth-child(even) {
+    background-color: #fbfbfb;
+}
+
+/* Hover Effect */
+tbody tr:hover {
+    background-color: #f1f8ff;
+    cursor: pointer;
+}
+
+/* Remove the border from the last row */
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* --- Custom Status Tags --- */
+
+.status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 2em; /* Pill shape */
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #fff;
+}
+
+.status-success {
+    background-color: #28a745;
+}
+
+.status-warning {
+    background-color: #ffc107;
+    color: #333;
+}
+
+.status-error {
+    background-color: #dc3545;
+}
+
+/* --- Log Viewer Specific Style --- */
+.log-output-wrapper {
+    background-color: #2f363d; /* Dark background for code/logs */
+    color: #f6f8fa; /* Light text */
+    padding: 15px;
+    border-radius: 6px;
+    font-family: monospace; /* Monospace font for readability */
+    font-size: 13px;
+    line-height: 1.4;
+    max-height: 70vh; /* Limits the height to 70% of viewport height */
+    overflow-y: scroll; /* Makes it vertically scrollable */
+    white-space: pre; /* Preserves whitespace and line breaks from the log file */
+    border: 1px solid #24292e;
+}
+
+/* Style for when logs are empty or loading */
+.log-message {
+    color: #959da5;
+}

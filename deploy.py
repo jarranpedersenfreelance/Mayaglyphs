@@ -26,9 +26,9 @@ LOCAL_SITE_DIR = "site"
 LOCAL_FILES = [
     "server.py", 
     "requirements.txt", 
-    "favicon.png", 
     "logs.py",
-    "logpage"
+    "resources",
+    "admin_pages"
 ]
 
 load_dotenv()
