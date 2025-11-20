@@ -11,6 +11,13 @@ This is meant to run on an AWS lightsail instance
 The keypair for SSH access to the instance should be stored as PersonalServerKey.pem
 After making the lightsail instance, assign it a static IP
 
+### pip3
+Make sure pip3 is installed on the server so python3 can import modules
+```
+sudo yum update -y
+sudo yum install python3-pip -y
+```
+
 ### Nginx
 In order to serve the webserver on the right port, Nginx is used
 To install Nginx on the lightsail instance:
@@ -59,6 +66,7 @@ To enable port 443 (HTTPS) a few more steps are needed
 2. Must have a domain name associated with the instance
 3. Install Certbot
 ```
+sudo yum update -y
 sudo yum install epel-release -y
 sudo yum install certbot python3-certbot-nginx -y
 ```

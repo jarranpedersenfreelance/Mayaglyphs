@@ -6,6 +6,7 @@ import signal
 import zipfile
 import os
 import shutil
+from dotenv import load_dotenv
 import urllib.request
 import urllib.error
 
@@ -21,8 +22,17 @@ REMOTE_DIR = f"/home/{REMOTE_USER}/"
 REMOTE_SITE_DIR = f"/home/{REMOTE_USER}/site/"
 LOCAL_SITE_DIR = "site"
 
-# Files to sync
-LOCAL_FILES = ["server.py"]
+# Webserver Files/Folders to sync
+LOCAL_FILES = [
+    "server.py", 
+    "requirements.txt", 
+    "favicon.png", 
+    "logpage"
+]
+
+load_dotenv()
+ADMIN_USER = os.getenv("ADMIN_USER")
+ADMIN_PASS = os.getenv("ADMIN_PASS")
 
 # --- Helper Functions ---
 
@@ -70,16 +80,29 @@ def print_remote_logs():
     ssh_cmd.append(f"tail -n 20 {REMOTE_DIR}server.log")
     subprocess.run(ssh_cmd)
 
+def install_requirements(remote=False):
+    """Installs dependencies from requirements.txt locally or remotely."""
+    print("Installing dependencies from requirements.txt")
+    
+    if remote:
+        ssh_cmd = get_ssh_base_cmd()
+        ssh_cmd.append(f"python3 -m pip install -r {REMOTE_DIR}requirements.txt")
+        run_command(ssh_cmd)
+        print("Remote requirements installed.")
+    else:
+        command = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+        subprocess.run(command, check=False)
+        print("Local requirements installed.")
+
 # --- Command Functions ---
 
 def local_start():
     """Starts the server locally."""
     print(f"--- Running server locally at localhost:{LOCAL_PORT} ---")
     signal.signal(signal.SIGINT, sigint_handler)
-    # kill old if it exists
+    install_requirements(remote=False)
     local_kill()
     print("Starting local server...")
-    # using sys.executable ensures we use the same python env running this script
     run_command([sys.executable, "server.py", str(LOCAL_PORT)])
 
 def server_kill():
@@ -119,12 +142,16 @@ def server_deploy():
     
     print("File transfer complete.")
 
-    # Stop old server
+    install_requirements(remote=True)
     server_kill()
 
     print(f"Starting server...")
     # Use nohup and redirects to ensure it runs in background 
-    remote_execution = f"cd {REMOTE_DIR} && nohup python3 server.py {SERVER_PORT} > server.log 2>&1 &"
+    remote_execution = (
+        f"cd {REMOTE_DIR} && "
+        f"ADMIN_USER='{ADMIN_USER}' ADMIN_PASS='{ADMIN_PASS}' "
+        f"nohup python3 server.py {SERVER_PORT} > server.log 2>&1 &"
+    )
     
     # Use -f -n flags for SSH to tell it to go to background instantly
     final_ssh_cmd = ["ssh", "-i", KEY_PATH, "-f", "-n", 
