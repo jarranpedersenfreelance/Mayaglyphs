@@ -8,8 +8,36 @@
     <link rel="icon" type="image/png" href="/favicon.ico" />
 </head>
 <body>
+
+    <div class="controls-wrapper" style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #e1e4e8; border-radius: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 style="margin: 0; font-size: 18px;">Log Management</h2>
+            <span id="log-size-display" class="status status-warning">Size: Checking...</span>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="search-input" placeholder="Search IP, URL, or Date..." 
+                style="flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            
+            <button onclick="performSearch()" 
+                    style="padding: 8px 16px; background-color: #0366d6; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Search
+            </button>
+
+            <button onclick="resetView()" 
+                    style="padding: 8px 16px; background-color: #fafbfc; color: #24292e; border: 1px solid #d1d5da; border-radius: 4px; cursor: pointer;">
+                Reset
+            </button>
+
+            <button onclick="archiveLogs()" 
+                    style="padding: 8px 16px; background-color: #d73a49; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: auto;">
+                Download & Clear Logs
+            </button>
+        </div>
+    </div>
+
     <div class="container">
-        <h1>Request Logs</h1>
+        <h1>Recent Requests</h1>
         
         <div class="log-output-wrapper" id="log-display">
             <span class="log-message">Loading logs...</span>
@@ -19,6 +47,7 @@
             Note: This log view only shows non-bot and non-static asset requests.
         </p>
     </div>
+
 <script src="resources/logs.js"></script>
 </body>
 </html>

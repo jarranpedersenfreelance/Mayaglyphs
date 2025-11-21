@@ -1,12 +1,16 @@
 import datetime
 import sys
 import requests
+import os
+from typing import Dict, List
 from urllib.parse import urlparse
 from user_agents import parse
 
 # --- Configuration ---
-LOG_FILE = "requests.log"
-ERROR_LOG_FILE = "errors.log"
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+LOG_FILE = os.path.join(CURRENT_DIR, "requests.log")
+ERROR_LOG_FILE = os.path.join(CURRENT_DIR, "errors.log")
 GEO_IP_API = "http://ip-api.com/json/{ip}?fields=country,regionName,city"
 LOG_FORMAT = "[{timestamp}] [{ip}] [{country}/{region}/{city}] [Referrer: {referrer}] [{method}] {url} | Agent: {user_agent}"
 
@@ -18,6 +22,27 @@ STATIC_ASSET_EXTENSIONS = (
 IGNORED_ROUTES = [
     '/logs'
 ]
+
+def get_log_size():
+    """Returns the size of requests.log in bytes"""
+    if os.path.exists(LOG_FILE):
+        return os.path.getsize(LOG_FILE)
+    return 0
+
+def search_logs(term) -> Dict[str, List[str]]:
+    """Filters log lines containing the term and returns JSON."""
+    results = []
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            # Iterate in reverse to show newest logs first
+            for line in reversed(lines): 
+                if term.lower() in line.lower():
+                    results.append(line.strip())
+                    # Limit results to avoid massive response payload
+                    if len(results) >= 500: 
+                        break
+    return {'results': results}
 
 
 def log_error_to_file(message):

@@ -3,12 +3,16 @@ import socketserver
 import sys
 import os
 import base64
+import json
+import datetime
+import urllib.parse
 from dotenv import load_dotenv
 import logs
 
 # Site files and Webserver files
 DIRECTORY = "site/public/"
-SYSTEM_ROOT = "." 
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 RESOURCE_PREFIX = "resources/"
 ADMIN_PREFIX = "admin_pages/"
 
@@ -38,28 +42,53 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         """Intercept specific routes before checking the static directory."""
         resource_path = f"/{RESOURCE_PREFIX}"
+        parsed_path = urllib.parse.urlparse(self.path)
+        path_only = parsed_path.path
+        query_params = urllib.parse.parse_qs(parsed_path.query)
 
-        if self.path.startswith(resource_path):
-            filepath = self.path[1:]
+        if path_only.startswith(resource_path):
+            filepath = path_only[1:]
             file_extension = os.path.splitext(filepath)[1].lower()
-            # Default to binary stream if unknown
             content_type = MIME_TYPES.get(file_extension, 'application/octet-stream')
 
             self.serve_file_from_root(filepath, content_type=content_type)
         
-        elif self.path == '/favicon.ico':
+        elif path_only == '/favicon.ico':
             self.serve_file_from_root(f"{RESOURCE_PREFIX}favicon.png", "image/png")
 
-        elif self.path == '/requests.log':
+        elif path_only == '/requests.log':
             if self.check_auth():
-                self.serve_file_from_root("requests.log", "text/plain; charset=utf-8")
+                self.serve_file_from_root("server/requests.log", "text/plain; charset=utf-8")
             
-        elif self.path == '/logs':
+        elif path_only == '/logs':
             if self.check_auth():
                 self.serve_file_from_root(f"{ADMIN_PREFIX}logs.html", "text/html; charset=utf-8")
+
+        elif path_only == '/api/logs/stats':
+            if self.check_auth():
+                self.send_json({'size': logs.get_log_size()})
+
+        elif path_only == '/api/logs/search':
+            if self.check_auth():
+                search_term = query_params.get('q', [''])[0] 
+                results = logs.search_logs(search_term)
+                self.send_json(results)
+
+        elif path_only == '/api/logs/archive':
+            if self.check_auth():
+                self.archive_logs()
             
         else:
             super().do_GET()
+
+    def send_json(self, data):
+        """Helper to send JSON response"""
+        response = json.dumps(data).encode('utf-8')
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
 
     def check_auth(self):
         """Checks for Basic Auth headers. Returns True if authorized."""
@@ -83,7 +112,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def serve_file_from_root(self, filename, content_type):
         """Helper to serve a file from the SYSTEM_ROOT instead of DIRECTORY"""
-        file_path = os.path.join(SYSTEM_ROOT, filename)
+        file_path = os.path.join(PROJECT_ROOT, filename)
         
         if os.path.exists(file_path):
             try:
@@ -99,6 +128,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(500, f"Internal Server Error: {e}")
         else:
             self.send_error(404, "File not found")
+
+    def archive_logs(self):
+        """Reads current log, sends it as download, then clears file."""
+        if os.path.exists(logs.LOG_FILE):
+            with open(logs.LOG_FILE, 'rb') as f:
+                content = f.read()
+            
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"requests_archive_{timestamp}.log"
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+            with open(logs.LOG_FILE, 'w'):
+                pass
 
 def run_server(port):
     """Sets up and runs the web server"""

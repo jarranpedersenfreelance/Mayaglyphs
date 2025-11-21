@@ -98,7 +98,7 @@ tbody tr:last-child td {
     font-family: monospace; /* Monospace font for readability */
     font-size: 13px;
     line-height: 1.4;
-    max-height: 70vh; /* Limits the height to 70% of viewport height */
+    max-height: 60vh; /* Limits the height to 70% of viewport height */
     overflow-y: scroll; /* Makes it vertically scrollable */
     white-space: pre; /* Preserves whitespace and line breaks from the log file */
     border: 1px solid #24292e;

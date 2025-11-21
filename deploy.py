@@ -24,9 +24,8 @@ LOCAL_SITE_DIR = "site"
 
 # Webserver Files/Folders to sync
 LOCAL_FILES = [
-    "server.py", 
     "requirements.txt", 
-    "logs.py",
+    "server",
     "resources",
     "admin_pages"
 ]
@@ -74,24 +73,31 @@ def check_health():
             
     return False
 
-def print_remote_logs():
-    """Reads the server.log file from the remote machine."""
-    print("\nFETCHING REMOTE SERVER LOGS (Last 20 lines)")
-    ssh_cmd = get_ssh_base_cmd()
-    ssh_cmd.append(f"tail -n 20 {REMOTE_DIR}server.log")
-    subprocess.run(ssh_cmd)
+def ensure_local_venv():
+    """Checks if local venv exists, creates if not."""
+    if not os.path.exists(".venv"):
+        print("Creating local virtual environment (.venv)...")
+        subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True)
+    return os.path.join(".venv", "bin", "python"), os.path.join(".venv", "bin", "pip")
 
-def install_requirements(remote=False):
+def install_requirements(remote=False, venv_pip=None):
     """Installs dependencies from requirements.txt locally or remotely."""
     print("Installing dependencies from requirements.txt")
     
     if remote:
         ssh_cmd = get_ssh_base_cmd()
-        ssh_cmd.append(f"python3 -m pip install -r {REMOTE_DIR}requirements.txt")
+        remote_cmds = (
+            "if [ ! -d '.venv' ]; then python3 -m venv .venv; fi && "
+            ".venv/bin/pip install -r requirements.txt"
+        )
+        ssh_cmd.append(remote_cmds)
         run_command(ssh_cmd)
         print("Remote requirements installed.")
     else:
-        command = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+        if not venv_pip:
+            _, venv_pip = ensure_local_venv()
+            
+        command = [venv_pip, "install", "-r", "requirements.txt"]
         subprocess.run(command, check=False)
         print("Local requirements installed.")
 
@@ -101,10 +107,11 @@ def local_start():
     """Starts the server locally."""
     print(f"--- Running server locally at localhost:{LOCAL_PORT} ---")
     signal.signal(signal.SIGINT, sigint_handler)
-    install_requirements(remote=False)
+    venv_python, venv_pip = ensure_local_venv()
+    install_requirements(remote=False, venv_pip=venv_pip)
     local_kill()
     print("Starting local server...")
-    run_command([sys.executable, "server.py", str(LOCAL_PORT)])
+    run_command([venv_python, "server/server.py", str(LOCAL_PORT)])
 
 def server_kill():
     print("Stopping old server...")
@@ -145,16 +152,14 @@ def server_deploy():
 
     install_requirements(remote=True)
     server_kill()
-
     print(f"Starting server...")
-    # Use nohup and redirects to ensure it runs in background 
+
     remote_execution = (
         f"cd {REMOTE_DIR} && "
         f"ADMIN_USER='{ADMIN_USER}' ADMIN_PASS='{ADMIN_PASS}' "
-        f"nohup python3 server.py {SERVER_PORT} > server.log 2>&1 &"
+        f"nohup .venv/bin/python server/server.py {SERVER_PORT} > /dev/null 2>&1 &"
     )
     
-    # Use -f -n flags for SSH to tell it to go to background instantly
     final_ssh_cmd = ["ssh", "-i", KEY_PATH, "-f", "-n", 
                      f"{REMOTE_USER}@{REMOTE_HOST}", remote_execution]
     
