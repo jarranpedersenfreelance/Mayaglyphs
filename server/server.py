@@ -7,7 +7,7 @@ import json
 import datetime
 import urllib.parse
 from dotenv import load_dotenv
-import logs
+import logger
 
 # Site files and Webserver files
 DIRECTORY = "site/public/"
@@ -15,6 +15,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 RESOURCE_PREFIX = "resources/"
 ADMIN_PREFIX = "admin_pages/"
+ERROR_TEMPLATE = "error.html"
 
 # .env vars
 load_dotenv()
@@ -35,9 +36,47 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # Initialize the standard handler pointing to site files
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
+    def send_error(self, code, message=None, explain=None):
+        """Overrides base method to send a custom error"""
+        is_api_request = self.path.startswith('/api/')
+
+        if message is None:
+            # Get the standard HTTP message if none is provided
+            message = self.responses[code][0] 
+
+        # Log the error internally using the logs module
+        logger.log_error_to_file(f"HTTP Error {code} ({message}): {self.path}")
+        
+        if is_api_request:
+            # API Response: Send a simple JSON error
+            response_data = {'error': explain if explain else message, 'code': code}
+            response = json.dumps(response_data).encode('utf-8')
+            
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Connection", "close")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+            
+        else:
+            # Send the custom HTML error page
+            display_message = explain if explain else message
+            template_path = os.path.join(ADMIN_PREFIX, ERROR_TEMPLATE)
+            with open(template_path, 'rt') as f:
+                template = f.read()
+            html_content = template.format(code=code, message=display_message).encode('utf-8')
+            
+            self.send_response(code)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Connection", "close")
+            self.send_header("Content-Length", str(len(html_content)))
+            self.end_headers()
+            self.wfile.write(html_content)
+
     def log_request(self, code='-', size='-'):
         """Overrides the base class method to write logs to custom file"""
-        logs.log_request_to_file(self) 
+        logger.log_request_to_file(self) 
 
     def do_GET(self):
         """Intercept specific routes before checking the static directory."""
@@ -55,28 +94,41 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         
         elif path_only == '/favicon.ico':
             self.serve_file_from_root(f"{RESOURCE_PREFIX}favicon.png", "image/png")
-
-        elif path_only == '/requests.log':
-            if self.check_auth():
-                self.serve_file_from_root("server/requests.log", "text/plain; charset=utf-8")
             
         elif path_only == '/logs':
-            if self.check_auth():
+            if self.check_auth(True):
                 self.serve_file_from_root(f"{ADMIN_PREFIX}logs.html", "text/html; charset=utf-8")
+
+        elif path_only == '/api/logs/requests.log':
+            if self.check_auth():
+                self.serve_file_from_root("logs/requests.log", "text/plain; charset=utf-8")
+
+        elif path_only == '/api/logs/errors.log':
+            if self.check_auth():
+                self.serve_file_from_root("logs/errors.log", "text/plain; charset=utf-8")
 
         elif path_only == '/api/logs/stats':
             if self.check_auth():
-                self.send_json({'size': logs.get_log_size()})
+                try:
+                    self.send_json({'size': logger.get_log_size()})
+                except Exception as e:
+                    self.send_error(500, explain=f"Failed to fetch log stats: {e}")
 
         elif path_only == '/api/logs/search':
             if self.check_auth():
-                search_term = query_params.get('q', [''])[0] 
-                results = logs.search_logs(search_term)
-                self.send_json(results)
+                try: 
+                    search_term = query_params.get('q', [''])[0] 
+                    results = logger.search_logs(search_term)
+                    self.send_json(results)
+                except Exception as e:
+                    self.send_error(500, explain=f"Log search failed due to an internal error: {e}")
 
         elif path_only == '/api/logs/archive':
             if self.check_auth():
-                self.archive_logs()
+                try:
+                    logger.archive_logs(self)
+                except Exception as e:
+                    self.send_error(500, explain=f"Log archive failed due to an internal error: {e}")
             
         else:
             super().do_GET()
@@ -90,7 +142,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(response)
 
-    def check_auth(self):
+    def check_auth(self, is_initial_page=False):
         """Checks for Basic Auth headers. Returns True if authorized."""
         auth_header = self.headers.get('Authorization')
 
@@ -102,16 +154,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if auth_header == expected_header:
             return True
         else:
-            # If no header or wrong password, send 401 to trigger browser popup
             self.send_response(401)
-            self.send_header('WWW-Authenticate', 'Basic realm="Restricted Logs"')
+            if is_initial_page:
+                self.send_header('WWW-Authenticate', 'Basic realm="Restricted Logs"')
+            
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
             self.wfile.write(b"Access denied: Authentication required.")
             return False
 
     def serve_file_from_root(self, filename, content_type):
-        """Helper to serve a file from the SYSTEM_ROOT instead of DIRECTORY"""
+        """Helper to serve a file from the PROJECT_ROOT instead of DIRECTORY"""
         file_path = os.path.join(PROJECT_ROOT, filename)
         
         if os.path.exists(file_path):
@@ -125,27 +178,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(content)
             except Exception as e:
-                self.send_error(500, f"Internal Server Error: {e}")
+                self.send_error(500, explain=f"Internal Server Error while reading file: {e}")
         else:
-            self.send_error(404, "File not found")
-
-    def archive_logs(self):
-        """Reads current log, sends it as download, then clears file."""
-        if os.path.exists(logs.LOG_FILE):
-            with open(logs.LOG_FILE, 'rb') as f:
-                content = f.read()
-            
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"requests_archive_{timestamp}.log"
-            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-            self.send_header("Content-Length", str(len(content)))
-            self.end_headers()
-            self.wfile.write(content)
-
-            with open(logs.LOG_FILE, 'w'):
-                pass
+            self.send_error(404, explain=f"The requested file '{filename}' could not be found.")
 
 def run_server(port):
     """Sets up and runs the web server"""

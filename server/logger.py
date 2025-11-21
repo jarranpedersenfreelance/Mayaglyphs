@@ -9,8 +9,8 @@ from user_agents import parse
 # --- Configuration ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
-LOG_FILE = os.path.join(CURRENT_DIR, "requests.log")
-ERROR_LOG_FILE = os.path.join(CURRENT_DIR, "errors.log")
+LOG_FILE = os.path.join(PROJECT_ROOT, "logs/requests.log")
+ERROR_LOG_FILE = os.path.join(PROJECT_ROOT, "logs/errors.log")
 GEO_IP_API = "http://ip-api.com/json/{ip}?fields=country,regionName,city"
 LOG_FORMAT = "[{timestamp}] [{ip}] [{country}/{region}/{city}] [Referrer: {referrer}] [{method}] {url} | Agent: {user_agent}"
 MAX_RETURN = 1000
@@ -50,12 +50,8 @@ def log_error_to_file(message):
     """Writes a timestamped message to the dedicated error log file."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] {message}"
-    
-    try:
-        with open(ERROR_LOG_FILE, 'a') as f:
-            f.write(log_entry + "\n")
-    except IOError as e:
-        print(f"FATAL LOGGING ERROR: Cannot write to {ERROR_LOG_FILE}. {e}", file=sys.stderr)
+    with open(ERROR_LOG_FILE, 'a') as f:
+        f.write(log_entry + "\n")
 
 def is_static_asset(url_path):
     """Checks if a request is for a static asset based on the file extension."""
@@ -151,3 +147,21 @@ def log_request_to_file(handler):
             f.write(log_entry + "\n")
     except IOError as e:
         print(f"Error writing to log file {LOG_FILE}: {e}", file=sys.stderr)
+
+def archive_logs(handler):
+    """Reads current log, sends it as download, then clears file."""
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'rb') as f:
+            content = f.read()
+        
+        handler.send_response(200)
+        handler.send_header("Content-Type", "text/plain")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"requests_archive_{timestamp}.log"
+        handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        handler.send_header("Content-Length", str(len(content)))
+        handler.end_headers()
+        handler.wfile.write(content)
+
+        with open(LOG_FILE, 'w'):
+            pass

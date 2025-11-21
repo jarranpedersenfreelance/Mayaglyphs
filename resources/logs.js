@@ -1,4 +1,4 @@
-const LOG_FILE_PATH = '/requests.log';
+const LOG_FILE_PATH = '/api/logs/requests.log';
 
 function scrollToBottom() {
     const logContainer = document.getElementById('log-display');
