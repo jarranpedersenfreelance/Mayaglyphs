@@ -2,7 +2,7 @@ import datetime
 import sys
 import requests
 import os
-from typing import Dict, List
+from typing import Dict, Any
 from urllib.parse import urlparse
 from user_agents import parse
 
@@ -13,6 +13,7 @@ LOG_FILE = os.path.join(CURRENT_DIR, "requests.log")
 ERROR_LOG_FILE = os.path.join(CURRENT_DIR, "errors.log")
 GEO_IP_API = "http://ip-api.com/json/{ip}?fields=country,regionName,city"
 LOG_FORMAT = "[{timestamp}] [{ip}] [{country}/{region}/{city}] [Referrer: {referrer}] [{method}] {url} | Agent: {user_agent}"
+MAX_RETURN = 1000
 
 STATIC_ASSET_EXTENSIONS = (
     '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.ico', 
@@ -29,7 +30,7 @@ def get_log_size():
         return os.path.getsize(LOG_FILE)
     return 0
 
-def search_logs(term) -> Dict[str, List[str]]:
+def search_logs(term) -> Dict[str, Any]:
     """Filters log lines containing the term and returns JSON."""
     results = []
     if os.path.exists(LOG_FILE):
@@ -40,9 +41,9 @@ def search_logs(term) -> Dict[str, List[str]]:
                 if term.lower() in line.lower():
                     results.append(line.strip())
                     # Limit results to avoid massive response payload
-                    if len(results) >= 500: 
+                    if len(results) >= MAX_RETURN: 
                         break
-    return {'results': results}
+    return {'results': results, 'count': len(results)}
 
 
 def log_error_to_file(message):

@@ -56,14 +56,31 @@ async function fetchLogStats() {
 
 async function performSearch() {
     const term = document.getElementById('search-input').value;
-    if (!term) return; // Don't search empty
-
     const logDisplayElement = document.getElementById('log-display');
     logDisplayElement.innerHTML = '<span class="log-message">Searching...</span>';
+    const countDisplay = document.getElementById('search-count-display');
+
+    if (!term) {
+        countDisplay.textContent = '';
+        fetchAndDisplayLogs();
+        return; 
+    }
+
+    logDisplayElement.innerHTML = '<span class="log-message">Searching...</span>';
+    countDisplay.textContent = 'Searching...';
 
     try {
         const response = await fetch(`/api/logs/search?q=${encodeURIComponent(term)}`);
         const data = await response.json();
+
+        const resultCount = data.count || 0;
+        countDisplay.textContent = `${resultCount} Match${resultCount !== 1 ? 'es' : ''}`;
+        
+        if (data.results && resultCount > 0) {
+            logDisplayElement.textContent = data.results.join('\n'); // Use \n to preserve line breaks
+        } else {
+            logDisplayElement.innerHTML = '<span class="log-message">No matches found.</span>';
+        }
         
         if (data.results && data.results.length > 0) {
             logDisplayElement.textContent = data.results.join('\n');
@@ -89,6 +106,7 @@ function archiveLogs() {
 
 function resetView() {
     document.getElementById('search-input').value = '';
+    document.getElementById('search-count-display').textContent = '';
     fetchAndDisplayLogs();
     fetchLogStats();
 }
