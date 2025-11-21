@@ -1,5 +1,12 @@
 const LOG_FILE_PATH = '/requests.log';
 
+function scrollToBottom() {
+    const logContainer = document.getElementById('log-display');
+    
+    if (logContainer) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+}
 
 async function fetchAndDisplayLogs() {
     const logDisplayElement = document.getElementById('log-display');
@@ -21,6 +28,7 @@ async function fetchAndDisplayLogs() {
         } else {
             logDisplayElement.textContent = logContent;
         }
+        scrollToBottom();
 
     } catch (error) {
         console.error("Error loading server logs:", error);
