@@ -108,3 +108,40 @@ tbody tr:last-child td {
 .log-message {
     color: #959da5;
 }
+
+.tabs-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 0; /* Sits directly on top of controls if desired */
+}
+
+.tab-button {
+    padding: 10px 20px;
+    background-color: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-bottom: none; /* Connect to element below */
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    font-weight: 600;
+    color: #586069;
+    position: relative;
+    top: 1px; /* Overlap border */
+}
+
+.tab-button:hover {
+    background-color: #fff;
+}
+
+.tab-button.active {
+    background-color: #fff;
+    color: #24292e;
+    border-bottom: 1px solid #fff; /* Hide bottom border to merge */
+    z-index: 2;
+}
+
+/* Adjust controls wrapper to look attached to tabs */
+.controls-wrapper {
+    margin-bottom: 20px; /* Keep margin at the bottom */
+    border-top-left-radius: 0 !important; 
+    border-top-right-radius: 0 !important;
+}

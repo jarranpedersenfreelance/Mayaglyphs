@@ -24,23 +24,30 @@ IGNORED_ROUTES = [
     '/logs'
 ]
 
-def get_log_size():
-    """Returns the size of requests.log in bytes"""
-    if os.path.exists(LOG_FILE):
-        return os.path.getsize(LOG_FILE)
+def get_log_file_path(log_type):
+    """Helper to select the correct file based on type."""
+    if log_type == 'error':
+        return ERROR_LOG_FILE
+    return LOG_FILE
+
+def get_log_size(log_type='requests'):
+    """Returns the size of the specified log file in bytes"""
+    target_file = get_log_file_path(log_type)
+    if os.path.exists(target_file):
+        return os.path.getsize(target_file)
     return 0
 
-def search_logs(term) -> Dict[str, Any]:
-    """Filters log lines containing the term and returns JSON."""
+def search_logs(term, log_type='requests') -> Dict[str, Any]:
+    """Filters log lines containing the term from the specified file."""
+    target_file = get_log_file_path(log_type)
     results = []
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+    if os.path.exists(target_file):
+        with open(target_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             # Iterate in reverse to show newest logs first
             for line in reversed(lines): 
                 if term.lower() in line.lower():
                     results.append(line.strip())
-                    # Limit results to avoid massive response payload
                     if len(results) >= MAX_RETURN: 
                         break
     return {'results': results, 'count': len(results)}
@@ -148,20 +155,26 @@ def log_request_to_file(handler):
     except IOError as e:
         print(f"Error writing to log file {LOG_FILE}: {e}", file=sys.stderr)
 
-def archive_logs(handler):
-    """Reads current log, sends it as download, then clears file."""
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'rb') as f:
+def archive_logs(handler, log_type='requests'):
+    """Reads specific log, sends as download, then clears it."""
+    target_file = get_log_file_path(log_type)
+    
+    if os.path.exists(target_file):
+        with open(target_file, 'rb') as f:
             content = f.read()
         
         handler.send_response(200)
         handler.send_header("Content-Type", "text/plain")
+        
+        # Create filename based on type
+        prefix = "errors" if log_type == 'error' else "requests"
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"requests_archive_{timestamp}.log"
+        filename = f"{prefix}_archive_{timestamp}.log"
+        
         handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         handler.send_header("Content-Length", str(len(content)))
         handler.end_headers()
         handler.wfile.write(content)
 
-        with open(LOG_FILE, 'w'):
+        with open(target_file, 'w'):
             pass

@@ -84,6 +84,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         path_only = parsed_path.path
         query_params = urllib.parse.parse_qs(parsed_path.query)
+        log_type = query_params.get('type', ['requests'])[0]
 
         if path_only.startswith(resource_path):
             filepath = path_only[1:]
@@ -110,7 +111,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif path_only == '/api/logs/stats':
             if self.check_auth():
                 try:
-                    self.send_json({'size': logger.get_log_size()})
+                    self.send_json({'size': logger.get_log_size(log_type)})
                 except Exception as e:
                     self.send_error(500, explain=f"Failed to fetch log stats: {e}")
 
@@ -118,7 +119,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if self.check_auth():
                 try: 
                     search_term = query_params.get('q', [''])[0] 
-                    results = logger.search_logs(search_term)
+                    results = logger.search_logs(search_term, log_type)
                     self.send_json(results)
                 except Exception as e:
                     self.send_error(500, explain=f"Log search failed due to an internal error: {e}")
@@ -126,7 +127,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif path_only == '/api/logs/archive':
             if self.check_auth():
                 try:
-                    logger.archive_logs(self)
+                    logger.archive_logs(self, log_type)
                 except Exception as e:
                     self.send_error(500, explain=f"Log archive failed due to an internal error: {e}")
             

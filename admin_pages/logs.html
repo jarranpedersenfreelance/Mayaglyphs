@@ -9,38 +9,45 @@
 </head>
 <body>
 
-    <div class="controls-wrapper" style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #e1e4e8; border-radius: 6px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h2 style="margin: 0; font-size: 18px;">Log Management (1000 Search Return Max)</h2>
-            <span id="log-size-display" class="status status-warning">Size: Checking...</span>
-        </div>
-
-        <div style="display: flex; gap: 10px;">
-            <input type="text" id="search-input" placeholder="Search IP, URL, or Date..." 
-                style="flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-
-            <span id="search-count-display" style="min-width: 100px; text-align: center; font-weight: 600; color: #586069;"></span>
-            
-            <button onclick="performSearch()" 
-                    style="padding: 8px 16px; background-color: #0366d6; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                Search
-            </button>
-
-            <button onclick="resetView()" 
-                    style="padding: 8px 16px; background-color: #fafbfc; color: #24292e; border: 1px solid #d1d5da; border-radius: 4px; cursor: pointer;">
-                Reset
-            </button>
-
-            <button onclick="archiveLogs()" 
-                    style="padding: 8px 16px; background-color: #d73a49; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: auto;">
-                Download & Clear Logs
-            </button>
+    <div class="container">
+        <div class="tabs-container">
+            <div class="tab-button active" id="tab-requests" onclick="switchTab('requests')">Request Logs</div>
+            <div class="tab-button" id="tab-errors" onclick="switchTab('error')">Error Logs</div>
         </div>
     </div>
 
     <div class="container">
-        <h1>Recent Requests</h1>
-        
+        <div class="controls-wrapper" style="padding: 15px; background: #fff; border: 1px solid #e1e4e8; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 class="h2-log-title" style="margin: 0; font-size: 18px;">Log Management (Requests) (1000 Search Return Max)</h2>
+                <span id="log-size-display" class="status status-warning">Size: Checking...</span>
+            </div>
+    
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="search-input" placeholder="Search IP, URL, or Date..." 
+                    style="flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+    
+                <span id="search-count-display" style="min-width: 100px; text-align: center; font-weight: 600; color: #586069;"></span>
+                
+                <button onclick="performSearch()" 
+                        style="padding: 8px 16px; background-color: #0366d6; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Search
+                </button>
+    
+                <button onclick="resetView()" 
+                        style="padding: 8px 16px; background-color: #fafbfc; color: #24292e; border: 1px solid #d1d5da; border-radius: 4px; cursor: pointer;">
+                    Reset
+                </button>
+    
+                <button onclick="archiveLogs()" 
+                        style="padding: 8px 16px; background-color: #d73a49; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: auto;">
+                    Download & Clear Logs
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" style="margin-top: 20px;">
         <div class="log-output-wrapper" id="log-display">
             <span class="log-message">Loading logs...</span>
         </div>
