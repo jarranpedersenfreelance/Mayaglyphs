@@ -65,7 +65,7 @@ def is_bot(user_agent_string):
 def get_geolocation(ip_address):
     """
     Attempts to get location data for a given IP address.
-    NOTE: Making an external API call for every request is NOT good for high traffic.
+    NOTE: Currently rate limited to 45/min, do batch lookup to increase
     """
     if ip_address in ('127.0.0.1', 'localhost'):
         return "N/A", "N/A", "N/A" # localhost/testing
@@ -89,11 +89,15 @@ def log_request_to_file(handler):
     """Logs the details of the incoming HTTP request to the LOG_FILE."""
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ip = handler.client_address[0]
     method = handler.command
     url = handler.path
     referrer = handler.headers.get('Referer', 'N/A')
     user_agent = handler.headers.get('User-Agent', 'N/A')
+
+    # Get proxy ip for server, regular for local
+    ip = handler.headers.get('X-Real-IP')
+    if not ip:
+        ip = handler.client_address[0]
 
     if is_static_asset(url):
         return
