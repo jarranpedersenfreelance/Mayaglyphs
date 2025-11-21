@@ -33,6 +33,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     """A request handler that serves files from a specific directory."""
     
     def __init__(self, *args, **kwargs):
+        # Create logs/ on first deploy
+        os.makedirs(os.path.join(PROJECT_ROOT, "logs"), exist_ok=True)
+        log_files = [logger.LOG_FILE, logger.ERROR_LOG_FILE]
+        for file_path in log_files:
+            if not os.path.exists(file_path):
+                with open(file_path, 'a'):
+                    pass
         # Initialize the standard handler pointing to site files
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
