@@ -7,6 +7,14 @@ function scrollToBottom() {
     }
 }
 
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    if (i === 0) return `${bytes} ${sizes[i]}`;
+    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+}
+
 /**
  * Switches the active log tab and triggers a view reset.
  * @param {string} type - 'requests' or 'error'
@@ -71,18 +79,27 @@ async function fetchAndDisplayLogs() {
  */
 async function fetchLogStats() {
     try {
-        // Append currentLogType to query for server to target the correct file
         const response = await fetch(`/api/logs/stats?type=${currentLogType}`);
         if (response.ok) {
             const data = await response.json();
             const size = data.size;
+            const maxSize = data.max_size;
             
-            // Format bytes to KB or MB
-            let formattedSize = size + " B";
-            if (size > 1024 * 1024) formattedSize = (size / (1024 * 1024)).toFixed(2) + " MB";
-            else if (size > 1024) formattedSize = (size / 1024).toFixed(2) + " KB";
+            // Format both sizes
+            const formattedSize = formatBytes(size);
+            const formattedMaxSize = formatBytes(maxSize);
             
-            document.getElementById('log-size-display').textContent = `Size: ${formattedSize}`;
+            const displayElement = document.getElementById('log-size-display');
+            displayElement.textContent = `Size: ${formattedSize} / ${formattedMaxSize}`;
+            
+            // Toggle Color: Red if full, Yellow otherwise
+            if (size >= maxSize) {
+                displayElement.classList.remove('status-warning');
+                displayElement.classList.add('status-error');
+            } else {
+                displayElement.classList.remove('status-error');
+                displayElement.classList.add('status-warning');
+            }
         }
     } catch (error) {
         console.error("Error fetching stats", error);

@@ -111,7 +111,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif path_only == '/api/logs/stats':
             if self.check_auth():
                 try:
-                    self.send_json({'size': logger.get_log_size(log_type)})
+                    current_size = logger.get_log_size(log_type)
+                    self.send_json({
+                        'size': current_size, 
+                        'max_size': logger.MAX_LOG_SIZE
+                    })
                 except Exception as e:
                     self.send_error(500, explain=f"Failed to fetch log stats: {e}")
 

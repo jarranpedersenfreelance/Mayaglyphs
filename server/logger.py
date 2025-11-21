@@ -14,6 +14,7 @@ ERROR_LOG_FILE = os.path.join(PROJECT_ROOT, "logs/errors.log")
 GEO_IP_API = "http://ip-api.com/json/{ip}?fields=country,regionName,city"
 LOG_FORMAT = "[{timestamp}] [{ip}] [{country}/{region}/{city}] [Referrer: {referrer}] [{method}] {url} | Agent: {user_agent}"
 MAX_RETURN = 1000
+MAX_LOG_SIZE = 5 * 1024 * 1024 * 1024  # 5 GB in bytes
 
 STATIC_ASSET_EXTENSIONS = (
     '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.ico', 
@@ -55,6 +56,8 @@ def search_logs(term, log_type='requests') -> Dict[str, Any]:
 
 def log_error_to_file(message):
     """Writes a timestamped message to the dedicated error log file."""
+    if os.path.getsize(ERROR_LOG_FILE) >= MAX_LOG_SIZE:
+        return
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] {message}"
     with open(ERROR_LOG_FILE, 'a') as f:
@@ -116,7 +119,9 @@ def get_geolocation(ip_address):
 
 def log_request_to_file(handler):
     """Logs the details of the incoming HTTP request to the LOG_FILE."""
-
+    if os.path.getsize(LOG_FILE) >= MAX_LOG_SIZE:
+        return
+    
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     method = handler.command
     url = handler.path
