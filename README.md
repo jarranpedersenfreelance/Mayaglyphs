@@ -67,7 +67,6 @@ To enable port 443 (HTTPS) a few more steps are needed
 3. Install Certbot
 ```
 sudo yum update -y
-sudo yum install epel-release -y
 sudo yum install certbot python3-certbot-nginx -y
 ```
 4. Edit the Nginx config again and change server_name to be the domain instead of the IP (if needed)
@@ -76,9 +75,10 @@ sudo nano /etc/nginx/nginx.conf
 sudo nginx -t
 sudo systemctl reload nginx
 ```
-5. Run certbot to generate the https cert (choose option 2 redirect for secure installation)
+5. Run certbot to generate the https cert
 ```
 sudo certbot --nginx -d domain.com
+sudo systemctl reload nginx
 ```
 HTTPS should now be live! Certbot will autorenew the cert every 90 days
 
