@@ -83,12 +83,17 @@ sudo systemctl reload nginx
 HTTPS should now be live! Certbot will autorenew the cert every 90 days
 
 ## Deployment
+Install python modules in .venv
+```
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
 Use the deploy.py script to deploy the server both locally (for testing) and remotely
 ```
-python3 deploy.py local
+./deploy.py local
 ```
 Additionally, use the deploy.py script to deploy the site itself from a zip file separately
 ```
-python3 deploy.py local-site
+./deploy.py local-site
 ```
 Note: this will replace the entire contents of ~/site/ on the server (or site/ locally) with the zip file contents
