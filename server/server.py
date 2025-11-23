@@ -3,7 +3,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from . import logger
-from flask import Flask, request, jsonify, make_response, send_from_directory, abort, render_template, send_file
+from flask import Flask, request, jsonify, make_response, send_from_directory, abort, render_template, send_file, after_this_request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -32,7 +32,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 def setup_logs():
     """Ensure log directories exist before the first request."""
     os.makedirs(os.path.join(PROJECT_ROOT, "logs"), exist_ok=True)
-    log_files = [logger.LOG_FILE, logger.ERROR_LOG_FILE]
+    log_files = [logger.LOG_FILE, logger.ERROR_LOG_FILE, logger.LOG_OVERFLOW]
     for file_path in log_files:
         if not os.path.exists(file_path):
             with open(file_path, 'a'):
@@ -139,6 +139,16 @@ def api_log_archive():
         
         if archive_path is None:
              return jsonify({'error': 'Log file not found.'}), 404
+        
+        @after_this_request
+        def cleanup(response):
+            """Deletes the temporary archived log file."""
+            try:
+                os.remove(archive_path)
+                app.logger.info(f"Successfully deleted temporary archive file: {archive_path}")
+            except OSError as e:
+                app.logger.error(f"Error deleting temporary archive file {archive_path}: {e}")
+            return response
         
         return send_file(archive_path, as_attachment=True, download_name=filename)
         

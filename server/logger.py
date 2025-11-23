@@ -10,11 +10,13 @@ from user_agents import parse
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 LOG_FILE = os.path.join(PROJECT_ROOT, "logs/requests.log")
+LOG_OVERFLOW = os.path.join(PROJECT_ROOT, "logs/requests_overflow.log")
 ERROR_LOG_FILE = os.path.join(PROJECT_ROOT, "logs/errors.log")
 GEO_IP_API = "http://ip-api.com/json/{ip}?fields=country,regionName,city"
 LOG_FORMAT = "[{timestamp}] [{ip}] [{country}/{region}/{city}] [Referrer: {referrer}] [{method}] {url} | Agent: {user_agent}"
 MAX_RETURN = 1000
 MAX_LOG_SIZE = 40 * 1024 * 1024  # 40 MB in bytes
+MAX_OVERFLOW_SIZE = 5 * 1024 * 1024 * 1024 # 5 GB in bytes
 
 STATIC_ASSET_EXTENSIONS = (
     '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.ico', 
@@ -119,8 +121,12 @@ def get_geolocation(ip_address):
 
 def log_flask_request(request, response):
     """Logs the details of the incoming Flask HTTP request to the LOG_FILE."""
-    if os.path.getsize(LOG_FILE) >= MAX_LOG_SIZE:
+    if os.path.getsize(LOG_OVERFLOW) >= MAX_OVERFLOW_SIZE:
         return
+    
+    log_file = LOG_FILE
+    if os.path.getsize(LOG_FILE) >= MAX_LOG_SIZE:
+        log_file = LOG_OVERFLOW
     
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     method = request.method
@@ -155,10 +161,10 @@ def log_flask_request(request, response):
     )
     
     try:
-        with open(LOG_FILE, 'a') as f:
+        with open(log_file, 'a') as f:
             f.write(log_entry + "\n")
     except IOError as e:
-        print(f"Error writing to log file {LOG_FILE}: {e}", file=sys.stderr)
+        print(f"Error writing to log file {log_file}: {e}", file=sys.stderr)
 
 def archive_logs(log_type='requests'):
     target_file = get_log_file_path(log_type)
