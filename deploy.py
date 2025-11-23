@@ -105,6 +105,61 @@ def install_requirements(remote=False, venv_pip=None):
 
 # --- Command Functions ---
 
+def update_systemd_service():
+    """Generates and updates the Systemd service file on the remote server."""
+    print("Updating Systemd Service configuration...")
+    
+    service_name = "pyserver.service"
+    
+    # Define the service file content dynamically to inject the env vars
+    service_content = f"""[Unit]
+Description=Gunicorn instance for python server
+After=network.target
+
+[Service]
+User={REMOTE_USER}
+Group={REMOTE_USER}
+WorkingDirectory={REMOTE_DIR}
+Environment="PATH={REMOTE_DIR}.venv/bin"
+Environment="ADMIN_USER={ADMIN_USER}"
+Environment="ADMIN_PASS={ADMIN_PASS}"
+ExecStart={REMOTE_DIR}.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:{SERVER_PORT} server.server:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+    # Write content to a local temp file
+    local_temp_path = "temp_service_file.service"
+    with open(local_temp_path, "w") as f:
+        f.write(service_content)
+
+    # SCP the file to the remote user's home dir (cannot scp directly to /etc)
+    rsync_cmd = [
+        "scp", "-i", KEY_PATH,
+        local_temp_path,
+        f"{REMOTE_USER}@{REMOTE_HOST}:{REMOTE_DIR}{service_name}"
+    ]
+    run_command(rsync_cmd)
+
+    # Move file to /etc/systemd/system/, set permissions, and reload
+    ssh_cmd = get_ssh_base_cmd()
+    remote_cmds = (
+        f"sudo mv {REMOTE_DIR}{service_name} /etc/systemd/system/{service_name} && "
+        f"sudo chmod 644 /etc/systemd/system/{service_name} && "
+        "sudo systemctl daemon-reload && "
+        "sudo systemctl enable pyserver"
+    )
+    ssh_cmd.append(remote_cmds)
+    run_command(ssh_cmd)
+    
+    # Cleanup local temp file
+    if os.path.exists(local_temp_path):
+        os.remove(local_temp_path)
+        
+    print("Systemd service updated.")
+
 def local_start():
     """Starts the server locally."""
     print(f"--- Running server locally at localhost:{LOCAL_PORT} ---")
@@ -116,10 +171,11 @@ def local_start():
     run_command([venv_python, "server/server.py", str(LOCAL_PORT)])
 
 def server_kill():
-    print("Stopping old server...")
+    print("Stopping server service...")
     ssh_cmd = get_ssh_base_cmd()
-    ssh_cmd.append("pkill -f server.py")
+    ssh_cmd.append("sudo systemctl stop pyserver")
     subprocess.run(ssh_cmd, stderr=subprocess.DEVNULL)
+    print("Server stopped.")
 
 def local_kill():
     print("Stopping old server...")
@@ -127,7 +183,7 @@ def local_kill():
     subprocess.run(['pkill', '-f', 'server.py'], stderr=subprocess.DEVNULL)
 
 def server_deploy():
-    """Syncs files and restarts the remote server."""
+    """Syncs files, updates systemd config, and restarts the service."""
     print("--- Starting Remote Server Deployment ---")
 
     # Ensure remote directory exists
@@ -136,12 +192,9 @@ def server_deploy():
     ssh_cmd.append(f"mkdir -p {REMOTE_DIR}")
     run_command(ssh_cmd)
 
-    # Sync local files via rsync
+    # Sync local files
     print("Transferring files with rsync...")
     for file_name in LOCAL_FILES:
-        # Construct rsync command
-        # -e specifies the ssh command to use (with key)
-        # Add --delete to delete files on server that are delete locally (will also delete other files)
         rsync_cmd = [
             "rsync", "-r", "-a", "-z",
             "-e", f"ssh -i {KEY_PATH}",
@@ -153,21 +206,18 @@ def server_deploy():
     print("File transfer complete.")
 
     install_requirements(remote=True)
-    server_kill()
-    print(f"Starting server...")
-
-    remote_execution = (
-        f"cd {REMOTE_DIR} && "
-        f"ADMIN_USER='{ADMIN_USER}' ADMIN_PASS='{ADMIN_PASS}' "
-        f"nohup .venv/bin/python server/server.py {SERVER_PORT} > /dev/null 2>&1 &"
-    )
     
-    final_ssh_cmd = ["ssh", "-i", KEY_PATH, "-f", "-n", 
-                     f"{REMOTE_USER}@{REMOTE_HOST}", remote_execution]
-    
-    run_command(final_ssh_cmd)
+    # Create/Update the systemd service file
+    update_systemd_service()
 
-    print("--- Remote Server Started! ---")
+    print(f"Restarting systemd service...")
+    
+    # Restart the service
+    ssh_cmd = get_ssh_base_cmd()
+    ssh_cmd.append("sudo systemctl restart pyserver")
+    run_command(ssh_cmd)
+
+    print("--- Remote Server Started via Systemd! ---")
     print(f"Access the site at: http://{REMOTE_HOST}")
 
 def deploy_site_local(zip_file_path):

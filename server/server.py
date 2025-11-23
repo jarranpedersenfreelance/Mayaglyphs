@@ -1,219 +1,192 @@
-import http.server
-import socketserver
-import sys
+import functools
 import os
-import base64
-import json
-import datetime
-import urllib.parse
+import sys
 from dotenv import load_dotenv
-import logger
+from . import logger
+from flask import Flask, request, jsonify, make_response, send_from_directory, abort, render_template, send_file
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-# Site files and Webserver files
-DIRECTORY = "site/public/"
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
-RESOURCE_PREFIX = "resources/"
-ADMIN_PREFIX = "admin_pages/"
+
+RESOURCE_PREFIX = "resources"
+ADMIN_PREFIX = "admin_pages"
 ERROR_TEMPLATE = "error.html"
+
+INDEX_FILE = "LMGGC.html"
+LOGS_TEMPLATE = "logs.html.jinja"
+ERROR_TEMPLATE = "error.html.jinja"
 
 # .env vars
 load_dotenv()
 USERNAME = os.getenv("ADMIN_USER")
 PASSWORD = os.getenv("ADMIN_PASS")
 
-# resource file types
-MIME_TYPES = {
-    '.css': 'text/css',
-    '.js': 'application/javascript',
-    '.png': 'image/png'
-}
+# --- Flask App Initialization ---
+app = Flask(__name__, 
+            static_folder=os.path.join(PROJECT_ROOT, "site/public"),
+            template_folder=os.path.join(PROJECT_ROOT, ADMIN_PREFIX))
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    """A request handler that serves files from a specific directory."""
-    
-    def __init__(self, *args, **kwargs):
-        # Create logs/ on first deploy
-        os.makedirs(os.path.join(PROJECT_ROOT, "logs"), exist_ok=True)
-        log_files = [logger.LOG_FILE, logger.ERROR_LOG_FILE]
-        for file_path in log_files:
-            if not os.path.exists(file_path):
-                with open(file_path, 'a'):
-                    pass
-        # Initialize the standard handler pointing to site files
-        super().__init__(*args, directory=DIRECTORY, **kwargs)
+@app.before_request
+def setup_logs():
+    """Ensure log directories exist before the first request."""
+    os.makedirs(os.path.join(PROJECT_ROOT, "logs"), exist_ok=True)
+    log_files = [logger.LOG_FILE, logger.ERROR_LOG_FILE]
+    for file_path in log_files:
+        if not os.path.exists(file_path):
+            with open(file_path, 'a'):
+                pass
 
-    def send_error(self, code, message=None, explain=None):
-        """Overrides base method to send a custom error"""
-        is_api_request = self.path.startswith('/api/')
+# --- Helper Functions ---
 
-        if message is None:
-            # Get the standard HTTP message if none is provided
-            message = self.responses[code][0] 
+def check_auth():
+    """Checks for Basic Auth headers. Returns True if authorized."""
+    auth = request.authorization
+    if auth and auth.username == USERNAME and auth.password == PASSWORD:
+        return True
+    return False
 
-        # Log the error internally using the logs module
-        logger.log_error_to_file(f"HTTP Error {code} ({message}): {self.path}")
-        
-        if is_api_request:
-            # API Response: Send a simple JSON error
-            response_data = {'error': explain if explain else message, 'code': code}
-            response = json.dumps(response_data).encode('utf-8')
-            
-            self.send_response(code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Connection", "close")
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response)
-            
-        else:
-            # Send the custom HTML error page
-            display_message = explain if explain else message
-            template_path = os.path.join(ADMIN_PREFIX, ERROR_TEMPLATE)
-            with open(template_path, 'rt') as f:
-                template = f.read()
-            html_content = template.format(code=code, message=display_message).encode('utf-8')
-            
-            self.send_response(code)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Connection", "close")
-            self.send_header("Content-Length", str(len(html_content)))
-            self.end_headers()
-            self.wfile.write(html_content)
+def requires_auth(f):
+    """Decorator to enforce Basic Authentication."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not check_auth():
+            return make_response('Access denied: Authentication required.', 401, 
+                                 {'WWW-Authenticate': 'Basic realm="Restricted Logs"'})
+        return f(*args, **kwargs)
+    return decorated
 
-    def log_request(self, code='-', size='-'):
-        """Overrides the base class method to write logs to custom file"""
-        logger.log_request_to_file(self) 
+# --- Route Definitions ---
 
-    def do_GET(self):
-        """Intercept specific routes before checking the static directory."""
-        resource_path = f"/{RESOURCE_PREFIX}"
-        parsed_path = urllib.parse.urlparse(self.path)
-        path_only = parsed_path.path
-        query_params = urllib.parse.parse_qs(parsed_path.query)
-        log_type = query_params.get('type', ['requests'])[0]
+# Static Files
+@app.route('/')
+def index():
+    return send_from_directory(str(app.static_folder), INDEX_FILE)
 
-        if path_only.startswith(resource_path):
-            filepath = path_only[1:]
-            file_extension = os.path.splitext(filepath)[1].lower()
-            content_type = MIME_TYPES.get(file_extension, 'application/octet-stream')
+@app.route('/<path:filename>')
+def serve_public_files(filename):
+    return send_from_directory(str(app.static_folder), filename)
 
-            self.serve_file_from_root(filepath, content_type=content_type)
-        
-        elif path_only == '/favicon.ico':
-            self.serve_file_from_root(f"{RESOURCE_PREFIX}favicon.png", "image/png")
-            
-        elif path_only == '/logs':
-            if self.check_auth(True):
-                self.serve_file_from_root(f"{ADMIN_PREFIX}logs.html", "text/html; charset=utf-8")
-
-        elif path_only == '/api/logs/requests.log':
-            if self.check_auth():
-                self.serve_file_from_root("logs/requests.log", "text/plain; charset=utf-8")
-
-        elif path_only == '/api/logs/errors.log':
-            if self.check_auth():
-                self.serve_file_from_root("logs/errors.log", "text/plain; charset=utf-8")
-
-        elif path_only == '/api/logs/stats':
-            if self.check_auth():
-                try:
-                    current_size = logger.get_log_size(log_type)
-                    self.send_json({
-                        'size': current_size, 
-                        'max_size': logger.MAX_LOG_SIZE
-                    })
-                except Exception as e:
-                    self.send_error(500, explain=f"Failed to fetch log stats: {e}")
-
-        elif path_only == '/api/logs/search':
-            if self.check_auth():
-                try: 
-                    search_term = query_params.get('q', [''])[0] 
-                    results = logger.search_logs(search_term, log_type)
-                    self.send_json(results)
-                except Exception as e:
-                    self.send_error(500, explain=f"Log search failed due to an internal error: {e}")
-
-        elif path_only == '/api/logs/archive':
-            if self.check_auth():
-                try:
-                    logger.archive_logs(self, log_type)
-                except Exception as e:
-                    self.send_error(500, explain=f"Log archive failed due to an internal error: {e}")
-            
-        else:
-            super().do_GET()
-
-    def send_json(self, data):
-        """Helper to send JSON response"""
-        response = json.dumps(data).encode('utf-8')
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(response)))
-        self.end_headers()
-        self.wfile.write(response)
-
-    def check_auth(self, is_initial_page=False):
-        """Checks for Basic Auth headers. Returns True if authorized."""
-        auth_header = self.headers.get('Authorization')
-
-        # Basic auth sends credentials as "Basic base64(username:password)"
-        credentials = f"{USERNAME}:{PASSWORD}"
-        expected_signature = base64.b64encode(credentials.encode()).decode()
-        expected_header = f"Basic {expected_signature}"
-
-        if auth_header == expected_header:
-            return True
-        else:
-            self.send_response(401)
-            if is_initial_page:
-                self.send_header('WWW-Authenticate', 'Basic realm="Restricted Logs"')
-            
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b"Access denied: Authentication required.")
-            return False
-
-    def serve_file_from_root(self, filename, content_type):
-        """Helper to serve a file from the PROJECT_ROOT instead of DIRECTORY"""
-        file_path = os.path.join(PROJECT_ROOT, filename)
-        
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, 'rb') as f:
-                    content = f.read()
-                
-                self.send_response(200)
-                self.send_header("Content-Type", content_type)
-                self.send_header("Content-Length", str(len(content)))
-                self.end_headers()
-                self.wfile.write(content)
-            except Exception as e:
-                self.send_error(500, explain=f"Internal Server Error while reading file: {e}")
-        else:
-            self.send_error(404, explain=f"The requested file '{filename}' could not be found.")
-
-def run_server(port):
-    """Sets up and runs the web server"""
-    print(f"Serving HTTP on port {port} ...")
+# Resources (CSS/JS/Images from PROJECT_ROOT/resources/)
+@app.route(f'/{RESOURCE_PREFIX}/<path:filename>')
+def serve_resources(filename):
+    """Serves files from the project root's resources/ directory."""
     try:
-        socketserver.TCPServer.allow_reuse_address = True 
-        with socketserver.TCPServer(("", port), Handler) as httpd:
-            httpd.serve_forever()
-    except PermissionError:
-        print(f"Error: Permission denied. Cannot bind to port {port}.")
-        sys.exit(1)
-    except KeyboardInterrupt:
-        print("\nServer stopped.")
+        resource_path = os.path.join(PROJECT_ROOT, RESOURCE_PREFIX)
+        return send_from_directory(resource_path, filename)
+    except FileNotFoundError:
+        abort(404)
+
+# Favicon
+@app.route('/favicon.ico')
+def favicon():
+
+    return serve_resources('favicon.png')
+
+# Logs Page (Requires Auth)
+@app.route('/logs')
+@requires_auth
+def logs_page():
+    return render_template(LOGS_TEMPLATE)
+
+# API Endpoints (Requires Auth)
+@app.route('/api/logs/<log_file>')
+@requires_auth
+def api_log_file(log_file):
+    """Serves requests.log or errors.log."""
+    if log_file not in ['requests.log', 'errors.log']:
+        abort(404)
+    
+    # Serve the file directly from the logs/ directory
+    log_path = os.path.join(PROJECT_ROOT, 'logs')
+    return send_from_directory(log_path, log_file, mimetype='text/plain')
+
+@app.route('/api/logs/stats')
+@requires_auth
+def api_log_stats():
+    log_type = request.args.get('type', 'requests')
+    try:
+        current_size = logger.get_log_size(log_type)
+        return jsonify({
+            'size': current_size, 
+            'max_size': logger.MAX_LOG_SIZE
+        })
+    except Exception as e:
+        app.logger.error(f"Failed to fetch log stats: {e}")
+        return jsonify({'error': f"Failed to fetch log stats: {e}", 'code': 500}), 500
+
+@app.route('/api/logs/search')
+@requires_auth
+def api_log_search():
+    log_type = request.args.get('type', 'requests')
+    search_term = request.args.get('q', '')
+    try: 
+        results = logger.search_logs(search_term, log_type)
+        return jsonify(results)
+    except Exception as e:
+        app.logger.error(f"Log search failed: {e}")
+        return jsonify({'error': f"Log search failed due to an internal error: {e}", 'code': 500}), 500
+
+@app.route('/api/logs/archive', methods=['GET'])
+@requires_auth
+def api_log_archive():
+    log_type = request.args.get('type', 'requests')
+    
+    try:
+        # Get the path to the renamed file
+        archive_path, filename = logger.archive_logs(log_type)
+        
+        if archive_path is None:
+             return jsonify({'error': 'Log file not found.'}), 404
+        
+        return send_file(archive_path, as_attachment=True, download_name=filename)
+        
+    except Exception as e:
+        app.logger.error(f"Log archive failed: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@app.after_request
+def log_all_requests(response):
+    """Logs details of every request after it has been processed by the app."""
+    try:
+        logger.log_flask_request(request, response)
+    except Exception as e:
+        # Log error but do not crash the request itself
+        print(f"CRITICAL: Failed to log request: {e}", file=sys.stderr)
+        
+    return response
+
+# --- Error Handling ---
+
+# Custom 404 handler
+@app.errorhandler(404)
+def page_not_found(error):
+    logger.log_error_to_file(f"HTTP Error 404 (Not Found): {request.path}")
+    try:
+        return make_response(app.jinja_env.get_template(ERROR_TEMPLATE).render(
+            code=404, message="Not Found"), 404)
+    except Exception:
+        return make_response("<h1>404 Not Found</h1>", 404)
+
+# Custom 500 handler
+@app.errorhandler(500)
+def internal_server_error(error):
+    logger.log_error_to_file(f"HTTP Error 500 (Internal Server Error): {request.path}")
+    try:
+        return make_response(app.jinja_env.get_template(ERROR_TEMPLATE).render(
+            code=500, message="Internal Server Error"), 500)
+    except Exception:
+        return make_response("<h1>500 Internal Server Error</h1>", 500)
+
+# --- Main Execution ---
 
 if __name__ == "__main__":
+    # Only run locally
+    import sys
     try:
         PORT = int(sys.argv[1])
-    except IndexError:
-        PORT = 1500 
-    except ValueError:
-        print("Error: Port must be an integer.")
-        sys.exit(1)
-        
-    run_server(PORT)
+    except (IndexError, ValueError):
+        PORT = 1500
+
+    app.run(port=PORT, debug=True)

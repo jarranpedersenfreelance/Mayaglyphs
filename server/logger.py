@@ -14,7 +14,7 @@ ERROR_LOG_FILE = os.path.join(PROJECT_ROOT, "logs/errors.log")
 GEO_IP_API = "http://ip-api.com/json/{ip}?fields=country,regionName,city"
 LOG_FORMAT = "[{timestamp}] [{ip}] [{country}/{region}/{city}] [Referrer: {referrer}] [{method}] {url} | Agent: {user_agent}"
 MAX_RETURN = 1000
-MAX_LOG_SIZE = 5 * 1024 * 1024 * 1024  # 5 GB in bytes
+MAX_LOG_SIZE = 40 * 1024 * 1024  # 40 MB in bytes
 
 STATIC_ASSET_EXTENSIONS = (
     '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.ico', 
@@ -117,21 +117,22 @@ def get_geolocation(ip_address):
         log_error_to_file(f"GeoIP failed for {ip_address}: {e}")
         return "GeoIP-Failed", "GeoIP-Failed", "GeoIP-Failed"
 
-def log_request_to_file(handler):
-    """Logs the details of the incoming HTTP request to the LOG_FILE."""
+def log_flask_request(request, response):
+    """Logs the details of the incoming Flask HTTP request to the LOG_FILE."""
     if os.path.getsize(LOG_FILE) >= MAX_LOG_SIZE:
         return
     
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    method = handler.command
-    url = handler.path
-    referrer = handler.headers.get('Referer', 'N/A')
-    user_agent = handler.headers.get('User-Agent', 'N/A')
+    method = request.method
+    url = request.full_path
+    referrer = request.headers.get('Referer', 'N/A')
+    user_agent = request.headers.get('User-Agent', 'N/A')
 
-    # Get proxy ip for server, regular for local
-    ip = handler.headers.get('X-Real-IP')
-    if not ip:
-        ip = handler.client_address[0]
+    # Flask should extract the true IP even through Nginx proxy
+    ip = request.remote_addr 
+    
+    if ip is None:
+        ip = "Unknown IP"
 
     if is_static_asset(url):
         return
@@ -139,7 +140,6 @@ def log_request_to_file(handler):
     if is_bot(user_agent):
         return
 
-    # Fetch Geolocation (comment out if performance needed)
     country, region, city = get_geolocation(ip)
     
     log_entry = LOG_FORMAT.format(
@@ -160,26 +160,28 @@ def log_request_to_file(handler):
     except IOError as e:
         print(f"Error writing to log file {LOG_FILE}: {e}", file=sys.stderr)
 
-def archive_logs(handler, log_type='requests'):
-    """Reads specific log, sends as download, then clears it."""
+def archive_logs(log_type='requests'):
     target_file = get_log_file_path(log_type)
     
     if os.path.exists(target_file):
-        with open(target_file, 'rb') as f:
-            content = f.read()
-        
-        handler.send_response(200)
-        handler.send_header("Content-Type", "text/plain")
-        
-        # Create filename based on type
+        # Create unique filename
         prefix = "errors" if log_type == 'error' else "requests"
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{prefix}_archive_{timestamp}.log"
+        archive_filename = f"{prefix}_archive_{timestamp}.log"
+        archive_path = os.path.join(os.path.dirname(target_file), archive_filename)
         
-        handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-        handler.send_header("Content-Length", str(len(content)))
-        handler.end_headers()
-        handler.wfile.write(content)
-
-        with open(target_file, 'w'):
-            pass
+        try:
+            # Rename the current log file
+            os.rename(target_file, archive_path)
+            
+            # Create a new empty log file immediately so logging can continue
+            with open(target_file, 'w'): 
+                pass
+                
+            return archive_path, archive_filename
+            
+        except OSError as e:
+            log_error_to_file(f"OSError during log archive: {e}")
+            return None, None
+            
+    return None, None
