@@ -149,6 +149,9 @@ def api_log_archive():
 @app.after_request
 def log_all_requests(response):
     """Logs details of every request after it has been processed by the app."""
+    if response.status_code == 404:
+        # logged in errors.log instead (likely bots)
+        return response
     try:
         logger.log_flask_request(request, response)
     except Exception as e:
